@@ -733,9 +733,32 @@ body {
 @media (max-width: 768px) {
   html { font-size: 15px; }
 
-  .navbar { padding: 0.8rem 1.2rem; }
-  .navbar.scrolled { padding: 0.6rem 1.2rem; }
-  .nav-logo { font-size: 1.25rem; }
+  /* Prevent ANY horizontal overflow */
+  body { overflow-x: hidden; }
+  .hero,
+  .trust-strip,
+  .features,
+  .gallery,
+  .testimonials,
+  .cta-section,
+  .faq,
+  .footer {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
+  .navbar {
+    padding: 0.8rem 1rem;
+    overflow: hidden;
+  }
+  .navbar.scrolled { padding: 0.6rem 1rem; }
+  .nav-logo {
+    font-size: 1.1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 60%;
+  }
   .nav-links { display: none; }
   .hamburger { display: flex; }
   .nav-links.open {
@@ -753,70 +776,119 @@ body {
   }
   .nav-links.open a { font-size: 1.05rem; padding: 0.3rem 0; }
 
-  .hero { padding: 5rem 1.2rem 3rem; min-height: auto; }
+  .hero {
+    padding: 5rem 1rem 2.5rem;
+    min-height: auto;
+  }
+  .hero::before { display: none; }
   .hero-content {
     grid-template-columns: 1fr;
     text-align: center;
-    gap: 2rem;
+    gap: 1.5rem;
+    max-width: 100%;
   }
-  .hero-text { order: 2; }
+  .hero-text {
+    order: 2;
+    padding: 0 0.5rem;
+    max-width: 100%;
+    overflow: hidden;
+  }
   .hero-image { order: 1; }
-  .hero-image img { max-height: 340px; }
-  .hero-image .glow-ring { width: 250px; height: 250px; }
-  .hero-title { font-size: 2rem; }
-  .hero-subtitle { margin: 0 auto 1.5rem; font-size: 1rem; }
-  .hero-price { justify-content: center; }
-  .hero-actions { justify-content: center; }
-  .hero-badge { font-size: 0.75rem; }
-  .price-current { font-size: 2rem; }
+  .hero-image img { max-height: 300px; width: auto; }
+  .hero-image .glow-ring { width: 200px; height: 200px; }
 
-  .trust-strip { padding: 1.5rem 1rem; }
-  .trust-items { gap: 1rem; justify-content: center; }
-  .trust-item { font-size: 0.8rem; }
-  .trust-item .icon { font-size: 1.2rem; }
+  .hero-badge { font-size: 0.75rem; }
+  .hero-title {
+    font-size: 1.6rem;
+    line-height: 1.35;
+    word-break: keep-all;
+    overflow-wrap: break-word;
+  }
+  .hero-subtitle {
+    margin: 0 auto 1.2rem;
+    font-size: 0.9rem;
+    padding: 0 0.5rem;
+    line-height: 1.7;
+  }
+  .hero-price {
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .price-current { font-size: 1.8rem; }
+  .price-original { font-size: 1rem; }
+  .price-save { font-size: 0.7rem; }
+
+  .hero-actions {
+    justify-content: center;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.8rem;
+  }
+  .btn-primary, .btn-secondary {
+    width: 100%;
+    max-width: 280px;
+    justify-content: center;
+    padding: 0.8rem 1.5rem;
+    font-size: 0.9rem;
+  }
+
+  .trust-strip { padding: 1.2rem 0.8rem; }
+  .trust-items {
+    gap: 0.8rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .trust-item { font-size: 0.75rem; }
+  .trust-item .icon { font-size: 1.1rem; }
 
   .features,
   .testimonials,
-  .faq { padding: 4rem 1.2rem; }
-  .features-grid { grid-template-columns: 1fr; gap: 1.2rem; }
-  .feature-card { padding: 1.5rem; }
-  .section-header { margin-bottom: 2.5rem; }
-  .section-title { font-size: 1.6rem; }
-  .section-desc { font-size: 0.9rem; }
+  .faq { padding: 3.5rem 1rem; }
+  .features-grid { grid-template-columns: 1fr; gap: 1rem; }
+  .feature-card { padding: 1.3rem; }
+  .section-header { margin-bottom: 2rem; }
+  .section-title { font-size: 1.4rem; }
+  .section-desc { font-size: 0.85rem; }
 
-  .gallery { padding: 4rem 1.2rem; }
-  .gallery-grid { grid-template-columns: 1fr; gap: 1.2rem; }
+  .gallery { padding: 3.5rem 1rem; }
+  .gallery-grid { grid-template-columns: 1fr; gap: 1rem; }
 
-  .testimonials-grid { grid-template-columns: 1fr; gap: 1.2rem; }
-  .testimonial-card { padding: 1.5rem; }
+  .testimonials-grid { grid-template-columns: 1fr; gap: 1rem; }
+  .testimonial-card { padding: 1.3rem; }
+  .testimonial-text { font-size: 0.9rem; }
 
-  .cta-section { padding: 4rem 1.2rem; }
-  .cta-box { padding: 2.5rem 1.5rem; border-radius: 16px; }
-  .cta-title { font-size: 1.5rem; }
-  .cta-price-big { font-size: 2.5rem; }
+  .cta-section { padding: 3.5rem 1rem; }
+  .cta-box { padding: 2rem 1.2rem; border-radius: 16px; }
+  .cta-title { font-size: 1.3rem; }
+  .cta-price-big { font-size: 2.2rem; }
+  .cta-desc { font-size: 0.9rem; }
+  .cta-includes { font-size: 0.8rem; }
 
-  .faq-question { font-size: 0.95rem; padding: 1.1rem 0; }
+  .faq-question { font-size: 0.9rem; padding: 1rem 0; }
+  .faq-answer-inner { font-size: 0.85rem; }
 
-  .footer { padding: 2.5rem 1.2rem 1.5rem; }
-  .footer-links { gap: 1.2rem; flex-wrap: wrap; justify-content: center; }
+  .footer { padding: 2rem 1rem 1.5rem; }
+  .footer-links { gap: 1rem; flex-wrap: wrap; justify-content: center; }
+  .footer-links a { font-size: 0.8rem; }
 
-  .whatsapp-float { bottom: 1.2rem; left: 1.2rem; width: 50px; height: 50px; }
-  .whatsapp-float svg { width: 24px; height: 24px; }
+  .whatsapp-float { bottom: 1rem; left: 1rem; width: 48px; height: 48px; }
+  .whatsapp-float svg { width: 22px; height: 22px; }
+
+  .lightbox img { max-width: 95vw; max-height: 80vh; }
 }
 
-/* ===== RESPONSIVE — SMALL PHONE ===== */
+/* ===== RESPONSIVE — SMALL PHONE (iPhone SE etc.) ===== */
 @media (max-width: 400px) {
-  html { font-size: 14px; }
-  .hero { padding: 4.5rem 1rem 2rem; }
-  .hero-image img { max-height: 280px; }
-  .hero-title { font-size: 1.7rem; }
-  .hero-actions { flex-direction: column; align-items: center; }
-  .btn-primary, .btn-secondary { width: 100%; justify-content: center; }
-  .hero-price { flex-wrap: wrap; justify-content: center; }
-  .price-current { font-size: 1.8rem; }
+  html { font-size: 13.5px; }
+  .hero { padding: 4.5rem 0.8rem 2rem; }
+  .hero-image img { max-height: 250px; }
+  .hero-title { font-size: 1.4rem; }
+  .hero-subtitle { font-size: 0.85rem; }
+  .price-current { font-size: 1.6rem; }
   .trust-items { flex-direction: column; align-items: center; }
-  .cta-box { padding: 2rem 1rem; }
-  .cta-price-big { font-size: 2rem; }
-  .cta-includes { font-size: 0.8rem; }
-  .footer-links { flex-direction: column; align-items: center; gap: 0.8rem; }
+  .cta-box { padding: 1.8rem 1rem; }
+  .cta-price-big { font-size: 1.8rem; }
+  .section-title { font-size: 1.25rem; }
+  .footer-links { flex-direction: column; align-items: center; gap: 0.7rem; }
 }
