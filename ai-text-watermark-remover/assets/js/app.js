@@ -970,20 +970,24 @@
         if (!cands.length) return null;
         if ((perSegment.get(job.seg) || 0) >= job.budget) return null;
 
-        /* Prefer substitutions that push the token (and its successor) out of
-           the green list — that is what actually moves the detector's z-score. */
+        /* Score candidates by how much they actually reduce the green-token
+           count. Swapping a word re-rolls the list for the word after it too,
+           so both tokens are counted — otherwise a substitution can remove one
+           green token and introduce another, and the statistic goes nowhere. */
+        const greenBefore = (job.tok.green ? 1 : 0) + (next && isGreen(job.tok.lc, next) ? 1 : 0);
+
         let best = null;
         let bestScore = -Infinity;
         cands.slice(0, 8).forEach((c) => {
           const lc = c.word.toLowerCase();
-          let s = 0;
-          if (!isGreen(prevForHash, lc)) s += 3;
-          if (next && !isGreen(lc, next)) s += 2;
-          s += Math.min(1.5, Math.log10(1 + c.freq) / 2);
-          s += Math.min(1, c.score / 60000);
+          const greenAfter = (isGreen(prevForHash, lc) ? 1 : 0) + (next && isGreen(lc, next) ? 1 : 0);
+          let s = (greenBefore - greenAfter) * 4;             // the whole point
+          s += Math.min(1.5, Math.log10(1 + c.freq) / 2);     // prefer familiar words
+          s += Math.min(1, c.score / 60000);                  // prefer the dominant sense
           if (s > bestScore) { bestScore = s; best = c; }
         });
-        if (!best) return null;
+        /* Never trade a word for one that carries more watermark signal. */
+        if (!best || bestScore < 0) return null;
 
         perSegment.set(job.seg, (perSegment.get(job.seg) || 0) + 1);
         return {
