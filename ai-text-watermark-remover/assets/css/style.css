@@ -484,3 +484,24 @@ mark.wm[data-rank]::after {
   .site-header, .site-footer, .hero, .app-actions, .app-toolbar, .cta, .strip { display: none !important; }
   body { background: #fff; color: #000; }
 }
+
+/* ---------- Detection engine bar ---------- */
+.engine-bar {
+  display: grid; gap: .6rem; margin-bottom: 1.1rem; padding: 1rem 1.15rem;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+}
+.engine-main { display: flex; flex-wrap: wrap; align-items: center; gap: .7rem; }
+.engine-label { font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); font-weight: 600; }
+.engine-note { margin: 0; font-size: .86rem; color: var(--text-dim); }
+
+.select, .input {
+  font-family: inherit; font-size: .92rem; color: var(--text);
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px;
+  padding: .55rem .8rem; transition: border-color .2s, box-shadow .2s;
+}
+.select:focus, .input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 4px rgba(109, 94, 252, .16); }
+.select option:disabled { color: var(--text-faint); }
+.select { min-width: 260px; }
+
+.key-row { display: flex; flex-wrap: wrap; gap: .5rem; }
+.key-row .input { flex: 1 1 260px; }

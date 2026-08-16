@@ -180,6 +180,7 @@
     'website|email|online|digital|computer|computers|technology|technologies|intelligence|learning|' +
     'network|networks|research|study|studies|analysis|percent|percentage|million|billion|thousand|' +
     'government|company|companies|business|businesses|customer|customers|student|students|patient|' +
+    'organization|organizations|organisation|organisations|institution|institutions|agency|agencies|' +
     'patients|doctor|teacher|market|markets|price|prices|energy|water|climate|carbon|covid|virus|' +
     'vaccine|brain|cancer|gene|genes|protein|cell|cells|code|user|users|team|teams|project|projects|' +
     'report|reports|budget|revenue|profit|profits|contract|policy|policies|legal|court|human|humans|' +
@@ -818,11 +819,31 @@
     statConcentration: $('#statConcentration'), outputPanel: $('#outputPanel'), output: $('#output'),
     deltaBefore: $('#deltaBefore'), deltaAfter: $('#deltaAfter'), deltaCount: $('#deltaCount'),
     changeList: $('#changeList'), changeCount: $('#changeCount'), copyBtn: $('#copyBtn'),
-    downloadBtn: $('#downloadBtn'), reanalyzeBtn: $('#reanalyzeBtn'), useApi: $('#useApi')
+    downloadBtn: $('#downloadBtn'), reanalyzeBtn: $('#reanalyzeBtn'), useApi: $('#useApi'),
+    engineSelect: $('#engineSelect'), engineNote: $('#engineNote'), engineBadge: $('#engineBadge'),
+    keyRow: $('#keyRow'), keyInput: $('#apiKey'), keySave: $('#keySave'),
+    runPanel: $('#runPanel'), runSummary: $('#runSummary'), runEngine: $('#runEngine'), runCalls: $('#runCalls')
   };
 
   let current = null;
   let cleanText = '';
+
+  /* ====================== detection engine ====================== */
+  /* The built-in estimate, expressed as a probability so it satisfies the
+     same interface as a real detection API. */
+  function localProbability(text) {
+    const tokens = tokenize(text);
+    if (tokens.length < 4) return 0.5;
+    let prev = '<|start|>';
+    let green = 0;
+    tokens.forEach((t) => {
+      if (isGreen(prev, t.lc)) green++;
+      prev = t.lc;
+    });
+    return normCdf(zScore(green, tokens.length));
+  }
+
+  const detector = window.ATWR_Detector.create(localProbability);
 
   /* ====================== rendering ====================== */
   const CIRC = 2 * Math.PI * 52;
@@ -833,7 +854,9 @@
     el.status.innerHTML = kind === 'busy' ? '<span class="spinner"></span>' + escapeHtml(msg) : escapeHtml(msg);
   }
 
+  let gaugeTimer = null;
   function renderGauge(value) {
+    if (gaugeTimer) { clearInterval(gaugeTimer); gaugeTimer = null; }
     el.confidenceValue.textContent = '0';
     el.gaugeArc.style.strokeDasharray = CIRC.toFixed(1);
     el.gaugeArc.style.strokeDashoffset = CIRC.toFixed(1);
@@ -844,10 +867,10 @@
     });
     let shown = 0;
     const step = Math.max(1, Math.round(value / 28));
-    const timer = setInterval(() => {
+    gaugeTimer = setInterval(() => {
       shown = Math.min(value, shown + step);
       el.confidenceValue.textContent = shown;
-      if (shown >= value) clearInterval(timer);
+      if (shown >= value) { clearInterval(gaugeTimer); gaugeTimer = null; }
     }, 26);
 
     el.verdictChip.textContent = value >= 75 ? 'High pressure' : value >= 50 ? 'Moderate' : 'Low';
@@ -918,6 +941,7 @@
     cleanText = '';
     el.results.hidden = false;
     el.outputPanel.hidden = true;
+    if (el.runPanel) el.runPanel.hidden = true;
     el.removeBtn.disabled = false;
     renderGauge(result.index);
     renderStats(result);
@@ -926,150 +950,307 @@
     setStatus('Analysis complete — ' + result.selected.length + ' high-impact segments isolated out of ' +
       result.segments.length + ' scanned. Break them to collapse the signal.', 'ok');
     el.results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    /* With the official engine selected, the verdict and the ranking come
+       from the API rather than from our estimate. */
+    if (selectedEngine() === 'official') refineWithDetector(result);
   }
 
-  function planReplacements(a) {
-    const jobs = [];
-    a.selected.forEach((seg) => {
-      const eligible = seg.eligible.slice();
-      /* Green tokens carry the signal, so they are targeted first. */
-      eligible.sort((x, y) => (y.green - x.green) || (y.raw.length - x.raw.length));
-      const budget = clamp(Math.ceil(eligible.length * 0.45), 1, 4);
-      /* A couple of spare candidates per slot, in case a word has no synonym. */
-      eligible.slice(0, budget + 4).forEach((tok) => {
-        jobs.push({ seg: seg, tok: tok, budget: budget });
+  function selectedEngine() {
+    return el.engineSelect ? el.engineSelect.value : 'local';
+  }
+
+  function refineWithDetector(result) {
+    detector.resetRun();
+    setStatus('Sending the document and its segments to the detection API…', 'busy');
+
+    detector.use('official').then((active) => {
+      if (active.id !== 'official') {
+        setStatus('Official detector unavailable — ' + detector.official.unavailableReason +
+          ' Showing the built-in estimate.', 'error');
+        return;
+      }
+
+      const texts = [result.text].concat(result.segments.map((s) => s.text));
+      return detector.score(texts).then((scores) => {
+        if (result !== current) return; // superseded by a newer analysis
+
+        const doc = scores[0];
+        result.detected = doc;
+        renderGauge(Math.round(doc.score * 100));
+        el.verdictChip.textContent = doc.watermarked ? 'Watermark detected' : 'No watermark detected';
+        el.verdictChip.className = 'chip ' + (doc.watermarked ? 'high' : 'low');
+
+        result.segments.forEach((seg, i) => {
+          const r = scores[i + 1];
+          if (!r) return;
+          seg.detected = r;
+          seg.confidence = r.score;
+          seg.score = 0.75 * r.score + 0.25 * Math.min(1, seg.density * 1.8);
+        });
+
+        /* Re-rank on the API's verdicts. */
+        const ranked = result.segments
+          .filter((s) => s.total >= 6 && s.eligible.length >= 2)
+          .sort((a, b) => b.confidence - a.confidence);
+        const count = Math.min(window.ATWR_CONFIG.optimizer.maxSegments, Math.max(
+          window.ATWR_CONFIG.optimizer.minSegments,
+          ranked.filter((s) => s.detected && s.detected.watermarked).length
+        ), ranked.length);
+        const picked = ranked.slice(0, count).sort((a, b) => a.start - b.start);
+        picked.forEach((s, i) => { s.rank = i + 1; });
+        result.selected = picked;
+        result.selectedIdx = picked.map((s) => s.index);
+
+        renderSegments(result);
+        renderPreview(result);
+        setStatus('Detection API: ' + (doc.watermarked ? 'watermark detected' : 'no watermark detected') +
+          ' (' + Math.round(doc.score * 100) + '%) · ' + picked.length + ' segments targeted · ' +
+          detector.stats.calls + ' calls.', 'ok');
+      });
+    }).catch((err) => {
+      setStatus('Detection API error: ' + (err && err.message ? err.message : 'unknown') +
+        ' Showing the built-in estimate.', 'error');
+    });
+  }
+
+  /* ====================== rewrite candidate generation ====================== */
+
+  /* Resolve, for one segment, which words can be swapped and what for.
+     Offsets are relative to the segment string, not the document. */
+  function resolveSegmentSlots(segText, useApi) {
+    const tokens = tokenize(segText);
+    if (tokens.length) tokens[0].sentenceInitial = true;
+    lockProtectedTerms(segText, tokens);
+
+    let prev = '<|start|>';
+    tokens.forEach((t) => { t.green = isGreen(prev, t.lc); prev = t.lc; });
+
+    const eligible = tokens.filter(isContentWord)
+      .sort((x, y) => (y.green - x.green) || (y.raw.length - x.raw.length))
+      .slice(0, 10);
+
+    return pool(eligible, 5, (tok) => {
+      const idx = tokens.indexOf(tok);
+      const before = idx > 0 ? tokens[idx - 1].lc : null;
+      const after = idx < tokens.length - 1 ? tokens[idx + 1].lc : null;
+      const prevForHash = before === null ? '<|start|>' : before;
+
+      return candidatesFor(tok.raw, before, after, useApi).then((res) => {
+        if (!res.list.length) return null;
+        const greenBefore = (tok.green ? 1 : 0) + (after && isGreen(tok.lc, after) ? 1 : 0);
+
+        const ranked = res.list.slice(0, 8).map((c) => {
+          const lc = c.word.toLowerCase();
+          const greenAfter = (isGreen(prevForHash, lc) ? 1 : 0) + (after && isGreen(lc, after) ? 1 : 0);
+          return {
+            word: c.word,
+            rank: (greenBefore - greenAfter) * 4 +
+              Math.min(1.5, Math.log10(1 + c.freq) / 2) +
+              Math.min(1, c.score / 60000)
+          };
+        }).filter((c) => c.rank >= 0).sort((a, b) => b.rank - a.rank);
+
+        return ranked.length ? { tok: tok, index: idx, ranked: ranked, source: res.source } : null;
+      });
+    }).then((slots) => ({ tokens: tokens, slots: slots.filter(Boolean) }));
+  }
+
+  /* Turn a set of chosen substitutions into a rewritten segment. */
+  function buildVariant(segText, tokens, chosen) {
+    const edits = chosen.map((c) => ({
+      offset: c.slot.tok.start,
+      length: c.slot.tok.raw.length,
+      from: c.slot.tok.raw,
+      to: matchCase(c.slot.tok.raw, c.candidate.word),
+      source: c.slot.source
+    }));
+
+    /* Fix the article in front of anything we changed. */
+    chosen.forEach((c) => {
+      const i = c.slot.index;
+      if (i <= 0) return;
+      const article = tokens[i - 1];
+      if (article.lc !== 'a' && article.lc !== 'an') return;
+      const want = articleFor(matchCase(c.slot.tok.raw, c.candidate.word));
+      if (want === article.lc) return;
+      edits.push({
+        offset: article.start, length: article.raw.length, from: article.raw,
+        to: matchCase(article.raw, want), source: 'grammar'
       });
     });
-    return jobs.slice(0, 40);
+
+    edits.sort((a, b) => a.offset - b.offset);
+    let text = '';
+    let cursor = 0;
+    edits.forEach((e) => {
+      if (e.offset < cursor) return;
+      text += segText.slice(cursor, e.offset) + e.to;
+      cursor = e.offset + e.length;
+    });
+    text += segText.slice(cursor);
+
+    return { text: text, changes: edits };
   }
 
+  /* Several genuinely different rewrites of one segment, so the detector has
+     something to choose between. Later rounds are allowed to change more. */
+  function makeSegmentVariants(seg, round) {
+    const useApi = el.useApi.checked;
+    const wanted = window.ATWR_CONFIG.optimizer.variantsPerSegment;
+
+    return resolveSegmentSlots(seg.original, useApi).then((res) => {
+      const slots = res.slots;
+      if (!slots.length) return [];
+
+      const depth = Math.min(slots.length, 1 + round); // 2 words, then 3, then 4
+      const variants = [];
+
+      const pick = (list) => buildVariant(seg.original, res.tokens, list);
+
+      /* A — the strongest candidates for the strongest slots. */
+      variants.push(pick(slots.slice(0, depth).map((s) => ({ slot: s, candidate: s.ranked[0] }))));
+
+      /* B — a different set of words, same strength. */
+      if (slots.length > depth) {
+        variants.push(pick(slots.slice(1, depth + 1).map((s) => ({ slot: s, candidate: s.ranked[0] }))));
+      }
+
+      /* C — same words, second-choice synonyms. */
+      const alternates = slots.slice(0, depth)
+        .filter((s) => s.ranked.length > 1)
+        .map((s) => ({ slot: s, candidate: s.ranked[1] }));
+      if (alternates.length) variants.push(pick(alternates));
+
+      return variants.filter((v) => v && v.changes.length && v.text !== seg.original).slice(0, wanted);
+    });
+  }
+
+  /* ====================== rewrite (detector-driven) ====================== */
   function rewrite() {
     if (!current) return;
-    const useApi = el.useApi.checked;
+
     el.removeBtn.disabled = true;
     el.analyzeBtn.disabled = true;
-    setStatus(useApi ? 'Querying the synonym dictionary and rewriting the marked segments…'
-      : 'Rewriting the marked segments with the built-in dictionary…', 'busy');
     apiHealthy = true;
     netFailures = 0;
     apiDown = false;
+    detector.resetRun();
 
-    const jobs = planReplacements(current);
-    const perSegment = new Map();
+    const segments = current.segments.map((s) => ({
+      start: s.markStart,
+      end: s.markEnd,
+      text: current.text.slice(s.markStart, s.markEnd)
+    }));
 
-    pool(jobs, 5, (job) => {
-      if ((perSegment.get(job.seg) || 0) >= job.budget) return null;
+    setStatus('Starting…', 'busy');
 
-      const idx = current.tokens.indexOf(job.tok);
-      const prev = idx > 0 ? current.tokens[idx - 1].lc : null;
-      const next = idx < current.tokens.length - 1 ? current.tokens[idx + 1].lc : null;
-      const prevForHash = prev === null ? '<|start|>' : prev;
-
-      return candidatesFor(job.tok.raw, prev, next, useApi).then((res) => {
-        const cands = res.list;
-        if (!cands.length) return null;
-        if ((perSegment.get(job.seg) || 0) >= job.budget) return null;
-
-        /* Score candidates by how much they actually reduce the green-token
-           count. Swapping a word re-rolls the list for the word after it too,
-           so both tokens are counted — otherwise a substitution can remove one
-           green token and introduce another, and the statistic goes nowhere. */
-        const greenBefore = (job.tok.green ? 1 : 0) + (next && isGreen(job.tok.lc, next) ? 1 : 0);
-
-        let best = null;
-        let bestScore = -Infinity;
-        cands.slice(0, 8).forEach((c) => {
-          const lc = c.word.toLowerCase();
-          const greenAfter = (isGreen(prevForHash, lc) ? 1 : 0) + (next && isGreen(lc, next) ? 1 : 0);
-          let s = (greenBefore - greenAfter) * 4;             // the whole point
-          s += Math.min(1.5, Math.log10(1 + c.freq) / 2);     // prefer familiar words
-          s += Math.min(1, c.score / 60000);                  // prefer the dominant sense
-          if (s > bestScore) { bestScore = s; best = c; }
-        });
-        /* Never trade a word for one that carries more watermark signal. */
-        if (!best || bestScore < 0) return null;
-
-        perSegment.set(job.seg, (perSegment.get(job.seg) || 0) + 1);
-        return {
-          start: job.tok.start,
-          end: job.tok.end,
-          from: job.tok.raw,
-          to: matchCase(job.tok.raw, best.word),
-          rank: job.seg.rank,
-          source: res.source
-        };
-      });
-    }).then((results) => {
-      const replacements = results.filter(Boolean);
-
-      /* Repair the preceding article when the new word starts with a
-         different sound — otherwise "a consequence" becomes "a outcome". */
-      const articleFixes = [];
-      replacements.forEach((ch) => {
-        const i = current.tokens.findIndex((t) => t.start === ch.start);
-        if (i <= 0) return;
-        const before = current.tokens[i - 1];
-        if (before.lc !== 'a' && before.lc !== 'an') return;
-        const want = articleFor(ch.to);
-        if (want === before.lc) return;
-        articleFixes.push({
-          start: before.start, end: before.end, from: before.raw,
-          to: matchCase(before.raw, want), rank: ch.rank, source: 'grammar'
-        });
-      });
-
-      const changes = replacements.concat(articleFixes).sort((a, b) => a.start - b.start);
-      const wordChanges = replacements.length;
-
-      let out = '';
-      let html = '';
-      let cursor = 0;
-      changes.forEach((ch) => {
-        if (ch.start < cursor) return;
-        out += current.text.slice(cursor, ch.start) + ch.to;
-        html += escapeHtml(current.text.slice(cursor, ch.start)) +
-          '<ins title="was: ' + escapeHtml(ch.from) + '">' + escapeHtml(ch.to) + '</ins>';
-        cursor = ch.end;
-      });
-      out += current.text.slice(cursor);
-      html += escapeHtml(current.text.slice(cursor));
-
-      cleanText = out;
-      el.output.innerHTML = html;
-      el.outputPanel.hidden = false;
-
-      const after = analyze(out, current.selectedIdx);
-      const weightBefore = Math.round(current.segmentWeight * 100);
-      const weightAfter = Math.round((after ? after.segmentWeight : current.segmentWeight) * 100);
-      el.deltaBefore.textContent = weightBefore + '%';
-      el.deltaAfter.textContent = weightAfter + '%';
-      el.deltaCount.textContent = wordChanges;
-      el.changeCount.textContent = changes.length;
-      el.changeList.innerHTML = changes.map((ch) =>
-        '<li><span class="from">' + escapeHtml(ch.from) + '</span><span aria-hidden="true">→</span>' +
-        '<span class="to">' + escapeHtml(ch.to) + '</span>' +
-        '<span class="src">segment ' + ch.rank + ' · ' + ch.source + '</span></li>').join('') ||
-        '<li>No safe substitution was found for this text.</li>';
-
-      el.removeBtn.disabled = false;
-      el.analyzeBtn.disabled = false;
-
-      if (!wordChanges) {
-        setStatus('No safe synonym was found for the marked segments. Try another passage or switch the online dictionary on.', 'error');
-      } else if (useApi && !apiHealthy) {
-        setStatus('Online dictionary unreachable — rewrote ' + wordChanges +
-          ' words with the built-in dictionary instead.', 'ok');
-      } else {
-        const drop = weightBefore - weightAfter;
-        setStatus('Done. ' + wordChanges + ' words replaced across ' + current.selected.length +
-          ' segments · watermark weight in those segments down ' + Math.max(0, drop) + ' points.', 'ok');
+    window.ATWR_Optimizer.run({
+      text: current.text,
+      segments: segments,
+      targetIndexes: current.selected.map((s) => s.index),
+      detector: detector,
+      generateVariants: makeSegmentVariants,
+      onProgress: (p) => {
+        const calls = p.calls ? ' · ' + p.calls + ' detector call' + (p.calls === 1 ? '' : 's') : '';
+        setStatus(p.message + calls, p.phase === 'done' ? 'ok' : 'busy');
       }
-      el.outputPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }).catch(() => {
+    }).then(renderRewriteResult).catch((err) => {
       el.removeBtn.disabled = false;
       el.analyzeBtn.disabled = false;
-      setStatus('Something went wrong while rewriting. Please try again.', 'error');
+      setStatus('Rewriting failed: ' + (err && err.message ? err.message : 'unknown error'), 'error');
     });
+  }
+
+  function renderRewriteResult(result) {
+    cleanText = result.text;
+
+    /* Map each segment-relative edit onto its position in the finished text
+       so the diff can be highlighted. */
+    const edited = result.targets
+      .filter((t) => t.current !== t.original)
+      .sort((a, b) => a.start - b.start);
+
+    const marks = [];
+    let drift = 0;
+    edited.forEach((t) => {
+      const newStart = t.start + drift;
+      (t.changes || []).forEach((c) => {
+        marks.push({ start: newStart + c.offset, end: newStart + c.offset + c.to.length, from: c.from });
+      });
+      drift += t.current.length - t.original.length;
+    });
+    marks.sort((a, b) => a.start - b.start);
+
+    let html = '';
+    let cursor = 0;
+    marks.forEach((m) => {
+      if (m.start < cursor) return;
+      html += escapeHtml(result.text.slice(cursor, m.start)) +
+        '<ins title="was: ' + escapeHtml(m.from) + '">' +
+        escapeHtml(result.text.slice(m.start, m.end)) + '</ins>';
+      cursor = m.end;
+    });
+    html += escapeHtml(result.text.slice(cursor));
+    el.output.innerHTML = html;
+    el.outputPanel.hidden = false;
+
+    const before = result.documentBefore ? Math.round(result.documentBefore.score * 100) : 0;
+    const after = result.documentAfter ? Math.round(result.documentAfter.score * 100) : before;
+    const wordChanges = result.changes.filter((c) => c.source !== 'grammar').length;
+
+    el.deltaBefore.textContent = before + '%';
+    el.deltaAfter.textContent = after + '%';
+    el.deltaCount.textContent = wordChanges;
+    el.changeCount.textContent = result.changes.length;
+    el.changeList.innerHTML = result.changes.map((ch) =>
+      '<li><span class="from">' + escapeHtml(ch.from) + '</span><span aria-hidden="true">→</span>' +
+      '<span class="to">' + escapeHtml(ch.to) + '</span>' +
+      '<span class="src">segment ' + (ch.segment ? ch.segment.index + 1 : '?') + ' · ' + ch.source + '</span></li>'
+    ).join('') || '<li>No safe substitution was found for this text.</li>';
+
+    renderRunSummary(result);
+
+    el.removeBtn.disabled = false;
+    el.analyzeBtn.disabled = false;
+
+    if (!wordChanges) {
+      setStatus('No safe synonym was found for the marked segments. Try another passage, or switch the online dictionary on.', 'error');
+    } else if (result.degraded) {
+      setStatus('Detection API unavailable (' + result.degraded + ') — scored with the built-in estimate instead. ' +
+        wordChanges + ' words replaced.', 'error');
+    } else {
+      setStatus('Done. ' + wordChanges + ' words replaced across ' + edited.length +
+        ' segments · watermark score ' + before + '% → ' + after + '%' +
+        (result.calls ? ' · ' + result.calls + ' detector calls' : '') + '.', 'ok');
+    }
+    el.outputPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /* Per-segment record of what was tried and what was kept. */
+  function renderRunSummary(result) {
+    if (!el.runSummary) return;
+    const rows = result.targets.map((t) => {
+      const attempts = (t.history || []).map((h) =>
+        '<span class="metric">round ' + h.round + ': ' + h.tried + ' tried, ' +
+        Math.round(h.from * 100) + '% → ' + Math.round(h.to * 100) + '%' +
+        (h.kept ? ' <strong>kept</strong>' : ' discarded') + '</span>').join('');
+      return '<li class="segment-item">' +
+        '<div class="segment-head">' +
+        '<span class="segment-index">' + (t.index + 1) + '</span>' +
+        '<span class="segment-title">' + Math.round(t.baseline * 100) + '% → ' +
+        Math.round(t.score * 100) + '%</span>' +
+        '<span class="segment-metrics">' + (attempts || '<span class="metric">no rewrite found</span>') + '</span>' +
+        '</div></li>';
+    }).join('');
+    el.runSummary.innerHTML = rows;
+    if (el.runPanel) el.runPanel.hidden = false;
+    if (el.runEngine) {
+      el.runEngine.textContent = result.engine === 'official'
+        ? 'Official detection API'
+        : 'Built-in statistical estimate';
+    }
+    if (el.runCalls) el.runCalls.textContent = result.calls + (result.cached ? ' (' + result.cached + ' cached)' : '');
   }
 
   /* ====================== wiring ====================== */
@@ -1098,6 +1279,40 @@
     };
     reader.onerror = () => setStatus('Could not read that file.', 'error');
     reader.readAsText(file);
+  }
+
+  /* Copy marked with data-copy-draft / data-copy-live flips wholesale when
+     the official detector goes live, so nothing has to be rewritten by hand
+     — and nothing claims a verification that is not happening yet. */
+  function applyFeatureCopy() {
+    const live = window.ATWR_CONFIG.features.officialDetector;
+    $$('[data-copy-draft]').forEach((node) => {
+      const text = live ? node.getAttribute('data-copy-live') : node.getAttribute('data-copy-draft');
+      if (text !== null) node.textContent = text;
+    });
+    $$('[data-show-when]').forEach((node) => {
+      node.hidden = (node.getAttribute('data-show-when') === 'live') !== live;
+    });
+  }
+
+  function updateEngineUi() {
+    const cfg = window.ATWR_CONFIG;
+    const official = selectedEngine() === 'official';
+
+    if (el.keyRow) {
+      el.keyRow.hidden = !(official && cfg.detector.mode === 'direct' && cfg.features.allowDirectKeyInBrowser);
+    }
+    if (el.engineNote) {
+      el.engineNote.textContent = !official
+        ? 'Scores are computed in your browser with the green-list z-test. Free, instant, and an estimate.'
+        : cfg.features.officialDetector
+          ? 'Every verdict below comes from the detection API. Segment scanning and rewrite scoring both use it.'
+          : 'Not available yet. The integration is built and tested — it activates the moment the API is live.';
+    }
+    if (el.engineBadge) {
+      el.engineBadge.textContent = official ? 'API' : 'Local';
+      el.engineBadge.className = 'chip ' + (official ? 'mid' : 'low');
+    }
   }
 
   function init() {
@@ -1173,6 +1388,25 @@
       runAnalysis();
     });
 
+    if (el.engineSelect) {
+      const cfg = window.ATWR_CONFIG;
+      const officialOption = el.engineSelect.querySelector('option[value="official"]');
+      if (officialOption && !cfg.features.officialDetector) {
+        officialOption.disabled = true;
+        officialOption.textContent = 'Official detection API — not yet available';
+      }
+      el.engineSelect.addEventListener('change', updateEngineUi);
+    }
+
+    if (el.keySave && el.keyInput) {
+      el.keyInput.value = window.ATWR_Detector.keyStore.get();
+      el.keySave.addEventListener('click', () => {
+        window.ATWR_Detector.keyStore.set(el.keyInput.value.trim());
+        setStatus(el.keyInput.value.trim() ? 'API key saved in this browser only.' : 'API key cleared.', 'ok');
+      });
+    }
+
+    updateEngineUi();
     updateCounter();
   }
 
@@ -1212,6 +1446,8 @@
 
     const year = $('#year');
     if (year) year.textContent = new Date().getFullYear();
+
+    applyFeatureCopy();
   }
 
   if (document.readyState === 'loading') {

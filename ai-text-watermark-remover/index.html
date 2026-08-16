@@ -222,7 +222,8 @@
         </div>
         <ul class="hero-badges">
           <li><span aria-hidden="true">🔒</span> Text never leaves your device</li>
-          <li><span aria-hidden="true">⚡</span> Results in under a second</li>
+          <li><span aria-hidden="true">⚡</span> <span data-copy-draft="Results in under a second"
+              data-copy-live="Verified against the official detector">Results in under a second</span></li>
           <li><span aria-hidden="true">∞</span> Unlimited use, no account</li>
         </ul>
       </div>
@@ -238,6 +239,25 @@
         </div>
 
         <div class="app-shell">
+          <!-- Detection engine -->
+          <div class="engine-bar">
+            <div class="engine-main">
+              <label class="engine-label" for="engineSelect">Detection engine</label>
+              <select id="engineSelect" class="select">
+                <option value="local" selected>Built-in statistical estimate</option>
+                <option value="official">Official detection API</option>
+              </select>
+              <span class="chip low" id="engineBadge">Local</span>
+            </div>
+            <p class="engine-note" id="engineNote"></p>
+            <div class="key-row" id="keyRow" hidden>
+              <label class="sr-only" for="apiKey">API key</label>
+              <input type="password" id="apiKey" class="input" placeholder="API key (stored in this browser only)"
+                autocomplete="off" spellcheck="false">
+              <button class="btn btn-soft btn-sm" id="keySave" type="button">Save key</button>
+            </div>
+          </div>
+
           <!-- Toolbar -->
           <div class="app-toolbar">
             <div class="toolbar-left">
@@ -334,21 +354,41 @@
               <div class="preview" id="preview" tabindex="0"></div>
             </div>
 
+            <!-- Optimization run -->
+            <div class="panel" id="runPanel" hidden>
+              <div class="panel-head">
+                <h3>Optimization run</h3>
+                <p>Each targeted segment is rewritten several ways, every version is re-scored, and only the version
+                  that lowers the score is kept. Stubborn segments get another round with more words in play.</p>
+              </div>
+              <div class="delta-bar">
+                <div class="delta-item">
+                  <span class="delta-label">Scored by</span>
+                  <span class="delta-value" id="runEngine" style="font-size:1rem">—</span>
+                </div>
+                <div class="delta-item delta-item-wide">
+                  <span class="delta-label">Detector calls</span>
+                  <span class="delta-value" id="runCalls">0</span>
+                </div>
+              </div>
+              <ol class="segment-list" id="runSummary"></ol>
+            </div>
+
             <!-- Output -->
             <div class="panel" id="outputPanel" hidden>
               <div class="panel-head">
                 <h3>Rewritten text</h3>
-                <p>Watermark-carrying words replaced with meaning-preserving synonyms. The figures below track the mean watermark weight of the targeted segments — the statistic the rewrite is designed to move.</p>
+                <p>Watermark-carrying words replaced with meaning-preserving synonyms. The figures below are the detector&rsquo;s score for the whole document, before and after.</p>
               </div>
 
               <div class="delta-bar" id="deltaBar">
                 <div class="delta-item">
-                  <span class="delta-label">Segment weight before</span>
+                  <span class="delta-label">Watermark score before</span>
                   <span class="delta-value delta-bad" id="deltaBefore">—</span>
                 </div>
                 <span class="delta-arrow" aria-hidden="true">→</span>
                 <div class="delta-item">
-                  <span class="delta-label">Segment weight after</span>
+                  <span class="delta-label">Watermark score after</span>
                   <span class="delta-value delta-good" id="deltaAfter">—</span>
                 </div>
                 <div class="delta-item delta-item-wide">
@@ -373,10 +413,14 @@
           </div>
 
           <p class="disclaimer">
-            <strong>How to read these numbers:</strong> this is a client-side heuristic detector. It reproduces the
-            standard green-list z-test used by watermarking research, but without the generator's private key, so scores
-            are a statistical estimate of watermark pressure — not a verdict from any specific vendor's detector. Use
-            the tool on text you own or are permitted to edit.
+            <strong data-copy-draft="How to read these numbers:" data-copy-live="How these numbers are produced:">How to read these numbers:</strong>
+            <span
+              data-copy-draft="this is a client-side heuristic detector. It reproduces the standard green-list z-test used by watermarking research, but without the generator's private key, so scores are a statistical estimate of watermark pressure — not a verdict from any specific vendor's detector."
+              data-copy-live="every score on this page comes from the official detection API. Your text is sent to that endpoint in segments, scored, and each candidate rewrite is scored again so only rewrites that measurably lower the score are kept.">this
+              is a client-side heuristic detector. It reproduces the standard green-list z-test used by watermarking
+              research, but without the generator's private key, so scores are a statistical estimate of watermark
+              pressure — not a verdict from any specific vendor's detector.</span>
+            Use the tool on text you own or are permitted to edit.
           </p>
         </div>
       </div>
@@ -396,8 +440,10 @@
           <article class="step">
             <span class="step-num">1</span>
             <h3>Score every segment</h3>
-            <p>Your text is split into segments and each token is hashed against its predecessor to determine
-              green-list membership — the same construction used in watermarking literature. Each segment gets a z-score.</p>
+            <p data-copy-draft="Your text is split into segments and each token is hashed against its predecessor to determine green-list membership — the same construction used in watermarking literature. Each segment gets a z-score."
+              data-copy-live="Your text is split into segments and every segment is sent to the official detection API in batches. Each one comes back with its own watermark verdict and score.">Your
+              text is split into segments and each token is hashed against its predecessor to determine green-list
+              membership — the same construction used in watermarking literature. Each segment gets a z-score.</p>
           </article>
           <article class="step">
             <span class="step-num">2</span>
@@ -407,9 +453,10 @@
           </article>
           <article class="step">
             <span class="step-num">3</span>
-            <h3>Rewrite with synonyms</h3>
-            <p>Inside those segments only, content words are swapped for part-of-speech-matched synonyms from a free
-              public lexical database. New tokens hash to new lists, and the statistic collapses toward chance.</p>
+            <h3>Rewrite, re-score, keep the winner</h3>
+            <p>Inside those segments only, several rewrites are generated using part-of-speech-matched synonyms. Every
+              version is scored again, and only the one that actually lowers the score survives. Stubborn segments get
+              another round with more words in play.</p>
           </article>
         </div>
       </div>
@@ -569,6 +616,9 @@
     </div>
   </footer>
 
+  <script src="/assets/js/config.js" defer></script>
+  <script src="/assets/js/detector.js" defer></script>
+  <script src="/assets/js/optimizer.js" defer></script>
   <script src="/assets/js/app.js" defer></script>
 </body>
 

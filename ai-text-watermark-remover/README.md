@@ -49,6 +49,12 @@ Anything that fails a guard is simply left alone. Precision is preferred over co
 
 ```
 index.html          landing page + the tool (SEO, JSON-LD, FAQ)
+API.md              detection-API contract and go-live checklist
+assets/js/config.js     feature flags, endpoint, budgets — the only file to edit
+assets/js/detector.js   detector interface: local estimate + official API
+assets/js/optimizer.js  scan -> rewrite -> re-score -> keep the winner
+functions/api/detect.js      Cloudflare Pages proxy (holds the key server-side)
+netlify/functions/detect.js  Netlify equivalent
 privacy.html        privacy policy
 terms.html          terms of use
 404.html            not-found page
@@ -59,6 +65,18 @@ assets/css/style.css
 assets/js/app.js    all application logic
 assets/img/         favicon.svg, og-cover.png
 ```
+
+## Detection engines
+
+The tool is written against one detector interface with two implementations:
+
+| Engine | What it is | Cost | Status |
+| --- | --- | --- | --- |
+| `local` | green-list z-test in the browser | free | default, always available |
+| `official` | a real detection API behind your own proxy | per vendor | built and tested, gated by one flag |
+
+The scan → rewrite → re-score → keep-the-winner loop in `optimizer.js` is engine-agnostic, so it runs
+identically on both. Turning the official engine on is a config change: see **[API.md](API.md)**.
 
 ## Dependencies
 

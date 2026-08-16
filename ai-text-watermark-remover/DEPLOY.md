@@ -114,6 +114,39 @@ grep -rl "aitextwatermarkremover.com" . | xargs sed -i "s/www\.aitextwatermarkre
 
 ---
 
+---
+
+## שלב 5 — הפעלת ה-API של הזיהוי (כשהוא ייצא)
+
+האתר **כבר בנוי ומחווט** לעבוד מול API אמיתי של זיהוי סימני מים. אין קוד חסר. מה שצריך ביום שהוא יוצא:
+
+1. **להעלות את הפרוקסי** — הקובץ `functions/api/detect.js` כבר במקום הנכון. Cloudflare Pages מזהה אותו
+   אוטומטית ומגיש אותו ב-`/api/detect`. (ל-Netlify יש גרסה מקבילה ב-`netlify/functions/detect.js`.)
+2. **להגדיר משתני סביבה** ב-Cloudflare (`Settings` → `Environment variables`):
+   - `WATERMARK_API_KEY` — המפתח הסודי. **לא מגיע לדפדפן אף פעם.**
+   - `WATERMARK_API_URL` — כתובת ה-API של הספק.
+3. **לבדוק** שהנקודה עונה:
+   ```bash
+   curl -X POST https://YOUR-DOMAIN/api/detect \
+     -H 'Content-Type: application/json' -d '{"texts":["hello world"]}'
+   ```
+4. **להדליק את המתג** ב-`assets/js/config.js`:
+   ```js
+   features: { officialDetector: true }
+   ```
+5. לרענן — כל הקופי באתר מתחלף אוטומטית לגרסה שמדברת על אימות מול הגלאי הרשמי, ובורר המנוע נפתח.
+
+⚠️ **אל תדליק את המתג לפני שה-API באמת עובד.** הקופי ה"חי" אומר למבקרים שהטקסט שלהם נבדק מול הגלאי
+הרשמי. אם זה לא קורה בפועל — האתר משקר למי שמסתמך עליו.
+
+**עלות:** הפרוקסי רץ על השכבה החינמית (Cloudflare Pages Functions: 100K קריאות ביום). התשלום היחיד
+הוא לספק ה-API לפי שימוש. ריצה טיפוסית על מסמך של 3 פסקאות = **4 בקשות** בלבד, בזכות batching ו-cache.
+התקרות ב-`config.js` (`maxCallsPerRun: 40`) מונעות הפתעות.
+
+פירוט מלא של החוזה, מבנה הבקשה/תשובה ומיפוי שדות: **[API.md](API.md)**.
+
+---
+
 ## שאלות נפוצות בהעלאה
 
 **האם צריך שרת או Node?** לא. זה HTML/CSS/JS סטטי בלבד.
