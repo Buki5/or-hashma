@@ -1,0 +1,13 @@
+{
+  "name": "AI Text Watermark Remover",
+  "short_name": "Watermark Remover",
+  "description": "Detect the text segments carrying the heaviest statistical watermark weight and rewrite them with natural synonyms.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#070b17",
+  "theme_color": "#0b1020",
+  "icons": [
+    { "src": "/assets/img/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

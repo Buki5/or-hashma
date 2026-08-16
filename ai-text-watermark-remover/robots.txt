@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+# Free AI Text Watermark Remover — static site, nothing private here.
+Disallow: /404.html
+
+Sitemap: https://www.aitextwatermarkremover.com/sitemap.xml
