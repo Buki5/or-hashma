@@ -14,35 +14,30 @@ window.ATWR_CONFIG = {
      officialDetector
        false → the site presents its own statistical estimate, and the
                official-detector option is shown as "not yet available".
-       true  → the site presents verdicts as coming from the official
-               detection API, and all marketing copy marked with
-               data-copy-live/data-copy-draft flips to the live wording.
+       true  → detection runs through your API key on the server, and all
+               copy marked data-copy-live/data-copy-draft flips to the live
+               wording.
 
-     Flip this to true ONLY once `detector.endpoint` is live and returning
-     real verdicts. Claiming a verification you are not performing is both
+     Flip this to true ONLY once /api/detect is live and returning real
+     verdicts. Claiming a verification you are not performing is both
      dishonest and, for anyone relying on it, harmful.
      ---------------------------------------------------------------------- */
   features: {
     officialDetector: false,
-    showEngineSelector: true,
-    allowDirectKeyInBrowser: false // dev/testing only — see the warning below
+    showEngineSelector: true
   },
 
   /* ----------------------------------------------------------------------
      DETECTION BACKEND
      ----------------------------------------------------------------------
-     mode
-       'proxy'  → the browser calls YOUR endpoint, which holds the API key
-                  server-side. This is the only safe production setting.
-       'direct' → the browser calls the vendor endpoint with a key typed by
-                  the user and kept in localStorage. Convenient for testing,
-                  never for a public site: the key is visible to anyone with
-                  devtools, and most vendors block browser origins by CORS.
+     The browser only ever talks to your own endpoint. The API key lives in
+     the hosting platform's environment variables and is never sent to, or
+     visible from, the browser. There is deliberately no way to enter a key
+     in the UI — a key typed into a web page is a key anyone can read.
      ---------------------------------------------------------------------- */
   detector: {
-    mode: 'proxy',
     endpoint: '/api/detect',
-    directEndpoint: 'https://api.anthropic.com/v1/detect/watermark',
+    verifyEndpoint: '/api/verify',
     model: 'claude-watermark-detector',
 
     /* Cost control — every one of these caps API spend per run. */
@@ -57,9 +52,25 @@ window.ATWR_CONFIG = {
   },
 
   /* ----------------------------------------------------------------------
-     OPTIMIZER
+     HUMAN VERIFICATION (Cloudflare Turnstile)
      ----------------------------------------------------------------------
-     The scan → rewrite → re-score → keep-the-best loop.
+     Free, privacy-preserving, and usually invisible. It exists to stop bots
+     burning your API budget, so by default it guards only runs that spend
+     money ('api'). Set protect: 'all' to challenge local runs too.
+
+     enabled  turn on after you have created a Turnstile widget
+     siteKey  the PUBLIC key from the Turnstile dashboard (safe to publish)
+              the SECRET key goes in the TURNSTILE_SECRET_KEY env var
+     ---------------------------------------------------------------------- */
+  turnstile: {
+    enabled: false,
+    siteKey: '',
+    protect: 'api',        // 'api' = only API-backed runs · 'all' = every run
+    sessionMinutes: 30     // how long one successful check stays valid
+  },
+
+  /* ----------------------------------------------------------------------
+     OPTIMIZER — the scan → rewrite → re-score → keep-the-best loop.
      ---------------------------------------------------------------------- */
   optimizer: {
     maxSegments: 5,        // how many segments to work on (3-5)

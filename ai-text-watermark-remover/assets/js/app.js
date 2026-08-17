@@ -821,7 +821,7 @@
     changeList: $('#changeList'), changeCount: $('#changeCount'), copyBtn: $('#copyBtn'),
     downloadBtn: $('#downloadBtn'), reanalyzeBtn: $('#reanalyzeBtn'), useApi: $('#useApi'),
     engineSelect: $('#engineSelect'), engineNote: $('#engineNote'), engineBadge: $('#engineBadge'),
-    keyRow: $('#keyRow'), keyInput: $('#apiKey'), keySave: $('#keySave'),
+    verifyBox: $('#verifyBox'),
     runPanel: $('#runPanel'), runSummary: $('#runSummary'), runEngine: $('#runEngine'), runCalls: $('#runCalls')
   };
 
@@ -930,6 +930,14 @@
   }
 
   /* ====================== actions ====================== */
+
+  /* Resolves when the run may proceed. Shows the human check only when this
+     run would spend API budget (or when configured to guard every run). */
+  function gateRun(usesApi) {
+    if (!window.ATWR_Turnstile) return Promise.resolve();
+    return window.ATWR_Turnstile.ensure(usesApi, el.verifyBox, (msg) => setStatus(msg, 'busy'));
+  }
+
   function runAnalysis() {
     const text = el.input.value;
     if (!text.trim()) { setStatus('Paste some text first, or load the sample.', 'error'); return; }
@@ -953,7 +961,11 @@
 
     /* With the official engine selected, the verdict and the ranking come
        from the API rather than from our estimate. */
-    if (selectedEngine() === 'official') refineWithDetector(result);
+    if (selectedEngine() === 'official') {
+      gateRun(true)
+        .then(() => refineWithDetector(result))
+        .catch((err) => setStatus(err.message + ' Showing the built-in estimate.', 'error'));
+    }
   }
 
   function selectedEngine() {
@@ -1129,7 +1141,20 @@
   /* ====================== rewrite (detector-driven) ====================== */
   function rewrite() {
     if (!current) return;
+    const usesApi = selectedEngine() === 'official';
 
+    el.removeBtn.disabled = true;
+    el.analyzeBtn.disabled = true;
+    setStatus('Starting…', 'busy');
+
+    gateRun(usesApi).then(() => startRewrite()).catch((err) => {
+      el.removeBtn.disabled = false;
+      el.analyzeBtn.disabled = false;
+      setStatus(err.message, 'error');
+    });
+  }
+
+  function startRewrite() {
     el.removeBtn.disabled = true;
     el.analyzeBtn.disabled = true;
     apiHealthy = true;
@@ -1299,15 +1324,12 @@
     const cfg = window.ATWR_CONFIG;
     const official = selectedEngine() === 'official';
 
-    if (el.keyRow) {
-      el.keyRow.hidden = !(official && cfg.detector.mode === 'direct' && cfg.features.allowDirectKeyInBrowser);
-    }
     if (el.engineNote) {
       el.engineNote.textContent = !official
         ? 'Scores are computed in your browser with the green-list z-test. Free, instant, and an estimate.'
         : cfg.features.officialDetector
-          ? 'Every verdict below comes from the detection API. Segment scanning and rewrite scoring both use it.'
-          : 'Not available yet. The integration is built and tested — it activates the moment the API is live.';
+          ? 'Every verdict below comes from the detection API, called through this site\u2019s own server so the key stays private.'
+          : 'Not available yet. The integration is built and tested \u2014 it activates the moment the API is live.';
     }
     if (el.engineBadge) {
       el.engineBadge.textContent = official ? 'API' : 'Local';
@@ -1396,14 +1418,6 @@
         officialOption.textContent = 'Official detection API — not yet available';
       }
       el.engineSelect.addEventListener('change', updateEngineUi);
-    }
-
-    if (el.keySave && el.keyInput) {
-      el.keyInput.value = window.ATWR_Detector.keyStore.get();
-      el.keySave.addEventListener('click', () => {
-        window.ATWR_Detector.keyStore.set(el.keyInput.value.trim());
-        setStatus(el.keyInput.value.trim() ? 'API key saved in this browser only.' : 'API key cleared.', 'ok');
-      });
     }
 
     updateEngineUi();

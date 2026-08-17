@@ -20,7 +20,6 @@
   'use strict';
 
   const CFG = window.ATWR_CONFIG;
-  const KEY_STORAGE = 'atwr-api-key';
 
   /* ---------------------------------------------------------------- utils */
   function hashKey(str) {
@@ -50,13 +49,6 @@
     for (let k = 0; k < Math.min(limit, items.length); k++) runners.push(next());
     return Promise.all(runners).then(() => results);
   }
-
-  /* ------------------------------------------------------------ key store */
-  const keyStore = {
-    get() { try { return localStorage.getItem(KEY_STORAGE) || ''; } catch (e) { return ''; } },
-    set(v) { try { v ? localStorage.setItem(KEY_STORAGE, v) : localStorage.removeItem(KEY_STORAGE); } catch (e) { /* private mode */ } },
-    has() { return !!this.get(); }
-  };
 
   /* =======================================================================
      RESPONSE MAPPING
@@ -121,14 +113,7 @@
     const cache = new Map();
     let unavailableReason = '';
 
-    function endpoint() {
-      return CFG.detector.mode === 'direct' ? CFG.detector.directEndpoint : CFG.detector.endpoint;
-    }
-
     function configured() {
-      if (CFG.detector.mode === 'direct') {
-        return CFG.features.allowDirectKeyInBrowser && keyStore.has();
-      }
       return !!CFG.detector.endpoint;
     }
 
@@ -136,13 +121,12 @@
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), CFG.detector.timeoutMs);
       const headers = { 'Content-Type': 'application/json' };
-      if (CFG.detector.mode === 'direct') {
-        headers['x-api-key'] = keyStore.get();
-        headers['anthropic-version'] = '2023-06-01';
-        headers['anthropic-dangerous-direct-browser-access'] = 'true';
-      }
 
-      return fetch(endpoint(), {
+      /* Proof that a human started this run, issued by /api/verify. */
+      const session = window.ATWR_Turnstile && window.ATWR_Turnstile.sessionHeader();
+      if (session) headers['x-atwr-session'] = session;
+
+      return fetch(CFG.detector.endpoint, {
         method: 'POST',
         headers: headers,
         signal: controller.signal,
@@ -172,6 +156,7 @@
         }
         return list.map((raw) => normalizeResult(raw, CFG.detector.threshold));
       }).catch((err) => {
+        if (err.status === 401 && window.ATWR_Turnstile) window.ATWR_Turnstile.clear();
         const retriable = !err.status || err.status === 429 || err.status >= 500;
         if (retriable && attempt < CFG.detector.retries) {
           return new Promise((r) => setTimeout(r, 400 * (attempt + 1)))
@@ -184,7 +169,7 @@
     return {
       id: 'official',
       get label() {
-        return CFG.features.officialDetector ? 'Official detection API' : 'Official detection API (not yet available)';
+        return CFG.features.officialDetector ? 'Detection API' : 'Detection API (not yet available)';
       },
       configured: configured,
       get unavailableReason() { return unavailableReason; },
@@ -195,9 +180,7 @@
           return Promise.resolve(false);
         }
         if (!configured()) {
-          unavailableReason = CFG.detector.mode === 'direct'
-            ? 'No API key set.'
-            : 'No detection endpoint configured.';
+          unavailableReason = 'No detection endpoint configured.';
           return Promise.resolve(false);
         }
         return Promise.resolve(true);
@@ -267,7 +250,6 @@
      HUB — selects the engine and tracks spend
      ======================================================================= */
   window.ATWR_Detector = {
-    keyStore: keyStore,
     normalizeResult: normalizeResult, // exported for tests
 
     create: function (localScorer) {

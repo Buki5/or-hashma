@@ -245,17 +245,11 @@
               <label class="engine-label" for="engineSelect">Detection engine</label>
               <select id="engineSelect" class="select">
                 <option value="local" selected>Built-in statistical estimate</option>
-                <option value="official">Official detection API</option>
+                <option value="official">Detection API</option>
               </select>
               <span class="chip low" id="engineBadge">Local</span>
             </div>
             <p class="engine-note" id="engineNote"></p>
-            <div class="key-row" id="keyRow" hidden>
-              <label class="sr-only" for="apiKey">API key</label>
-              <input type="password" id="apiKey" class="input" placeholder="API key (stored in this browser only)"
-                autocomplete="off" spellcheck="false">
-              <button class="btn btn-soft btn-sm" id="keySave" type="button">Save key</button>
-            </div>
           </div>
 
           <!-- Toolbar -->
@@ -296,6 +290,15 @@
               <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
               <span class="switch-label">Online synonym API</span>
             </label>
+          </div>
+
+          <!-- Human verification -->
+          <div class="verify-box" id="verifyBox" hidden>
+            <div>
+              <strong>Quick human check</strong>
+              <p>This runs once per session and keeps automated traffic from draining the detection budget.</p>
+            </div>
+            <div class="turnstile-widget"></div>
           </div>
 
           <!-- Status -->
@@ -617,6 +620,7 @@
   </footer>
 
   <script src="/assets/js/config.js" defer></script>
+  <script src="/assets/js/turnstile.js" defer></script>
   <script src="/assets/js/detector.js" defer></script>
   <script src="/assets/js/optimizer.js" defer></script>
   <script src="/assets/js/app.js" defer></script>

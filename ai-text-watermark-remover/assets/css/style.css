@@ -505,3 +505,13 @@ mark.wm[data-rank]::after {
 
 .key-row { display: flex; flex-wrap: wrap; gap: .5rem; }
 .key-row .input { flex: 1 1 260px; }
+
+/* ---------- Human verification ---------- */
+.verify-box {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem;
+  margin-top: 1.1rem; padding: 1rem 1.15rem;
+  border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface-2);
+}
+.verify-box strong { display: block; font-size: .95rem; }
+.verify-box p { margin: .2rem 0 0; font-size: .85rem; color: var(--text-dim); max-width: 46ch; }
+.turnstile-widget { min-height: 65px; }

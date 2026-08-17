@@ -176,12 +176,30 @@ Document score 63% → 44% · 4 words replaced · 4 requests, 18 texts scored
 
 ---
 
-## Direct-from-browser mode (development only)
+## Human verification
 
-`detector.mode: 'direct'` plus `features.allowDirectKeyInBrowser: true` reveals a key field in the UI and
-calls the vendor endpoint straight from the page. Use it to try a key quickly; never ship it. The key is
-readable by anyone with devtools, it is stored in `localStorage`, and most vendors block browser origins
-by CORS regardless.
+Cloudflare Turnstile guards the endpoint so bots cannot drain the API budget.
+
+- A Turnstile token is **single-use**, but one document run makes several detection calls. So the token is
+  exchanged once at `/api/verify` for a short-lived session signed with `SESSION_SECRET` (HMAC-SHA256 over
+  its own expiry — no personal data, unforgeable without the secret).
+- That session travels in the `x-atwr-session` header on every `/api/detect` call.
+- `/api/detect` enforces it **only when `TURNSTILE_SECRET_KEY` and `SESSION_SECRET` are both set**, so a
+  deployment works before you configure Turnstile — but once configured, an unverified request gets a
+  `401`, never a quiet pass.
+- On `401` the client clears the session and re-challenges on the next run.
+- By default (`turnstile.protect: 'api'`) only API-backed runs are challenged; local runs cost nothing and
+  are never interrupted. Set `'all'` to challenge everything.
+
+Setup: create a Turnstile widget, put the **site key** in `config.js` (it is public by design) and the
+**secret key** in the `TURNSTILE_SECRET_KEY` environment variable.
+
+## There is no API key field in the UI
+
+Deliberately. Anything the browser holds — a variable, a form field, `localStorage` — is readable by anyone
+who opens devtools. A key belongs in the hosting platform's environment variables, where the serverless
+function reads it and the browser never sees it. The engine toggle switches between the built-in estimate
+and *your server's* key; it never asks a visitor for one.
 
 ---
 

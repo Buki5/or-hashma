@@ -17,6 +17,8 @@
  * the front end reports honestly instead of inventing a verdict.
  */
 
+import { sessionValid } from './verify.js';
+
 const MAX_TEXTS = 16;
 const MAX_CHARS = 20000;
 
@@ -27,6 +29,18 @@ export async function onRequestPost(context) {
 
   if (allowed && origin && origin !== allowed) {
     return json({ error: { message: 'Origin not allowed' } }, 403, origin, allowed);
+  }
+
+  /* Human check. Enforced only when Turnstile is configured, so the
+     deployment keeps working before you set it up — but once the secret
+     exists, an unverified request is refused rather than quietly served. */
+  if (env.TURNSTILE_SECRET_KEY && env.SESSION_SECRET) {
+    const session = request.headers.get('x-atwr-session');
+    if (!(await sessionValid(session, env.SESSION_SECRET))) {
+      return json({
+        error: { message: 'Human verification required or expired.', code: 'verification_required' }
+      }, 401, origin, allowed);
+    }
   }
 
   let body;
@@ -153,7 +167,7 @@ export function onRequestOptions(context) {
     headers: {
       'Access-Control-Allow-Origin': allowed || '*',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, x-atwr-session',
       'Access-Control-Max-Age': '86400'
     }
   });

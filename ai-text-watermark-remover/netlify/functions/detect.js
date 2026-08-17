@@ -16,6 +16,8 @@
  *     status = 200
  */
 
+const { sessionValid } = require('./verify.js');
+
 const MAX_TEXTS = 16;
 const MAX_CHARS = 20000;
 
@@ -29,13 +31,21 @@ exports.handler = async function (event) {
       headers: {
         'Access-Control-Allow-Origin': allowed || '*',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type'
+        'Access-Control-Allow-Headers': 'Content-Type, x-atwr-session'
       },
       body: ''
     };
   }
   if (event.httpMethod !== 'POST') return reply({ error: { message: 'Use POST' } }, 405, allowed);
   if (allowed && origin && origin !== allowed) return reply({ error: { message: 'Origin not allowed' } }, 403, allowed);
+
+  /* Human check — enforced only once Turnstile is configured. */
+  if (process.env.TURNSTILE_SECRET_KEY && process.env.SESSION_SECRET) {
+    const session = event.headers['x-atwr-session'] || event.headers['X-ATWR-Session'];
+    if (!sessionValid(session, process.env.SESSION_SECRET)) {
+      return reply({ error: { message: 'Human verification required or expired.', code: 'verification_required' } }, 401, allowed);
+    }
+  }
 
   let body;
   try { body = JSON.parse(event.body || '{}'); }
