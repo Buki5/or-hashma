@@ -764,28 +764,16 @@
     const selectedSurplus = picked.reduce((a, s) => a + Math.max(0, s.surplus), 0);
     const concentration = positive > 0 ? selectedSurplus / positive : 0;
 
-    const lengths = segments.map((s) => s.total).filter((n) => n > 0);
-    const mean = lengths.reduce((a, b) => a + b, 0) / (lengths.length || 1);
-    const variance = lengths.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (lengths.length || 1);
-    const cv = mean ? Math.sqrt(variance) / mean : 1;
-    const uniformity = clamp(1 - cv / 0.8, 0, 1);
+    /* ONE number, one meaning: the probability the detector assigns to the
+       whole document. The gauge, the before/after bar and a re-analysis all
+       read this same value, so they can never disagree.
 
-    const sample = tokens.slice(0, 500).map((t) => t.lc);
-    const ttr = new Set(sample).size / (sample.length || 1);
-    const lexUniformity = clamp((0.78 - ttr) / 0.42, 0, 1);
-
-    /* Mean rather than max: one stubborn segment should not mask the effect of
-       breaking all the others, and the same formula runs before and after. */
-    const pAvg = picked.length
-      ? picked.reduce((acc, s) => acc + s.confidence, 0) / picked.length
-      : 0.5;
-    const index = clamp(Math.round(100 * (
-      0.42 * pAvg +
-      0.18 * normCdf(zDoc) +
-      0.16 * uniformity +
-      0.10 * lexUniformity +
-      0.14 * concentration
-    )), 5, 99);
+       An earlier version showed a composite index here that blended in the
+       mean score of the SELECTED segments. Because selection picks the
+       highest-scoring segments, that composite was biased upward and read
+       higher than the honest document score — which is why re-analysing a
+       cleaned text appeared to undo the cleaning. */
+    const documentScore = normCdf(zDoc);
 
     picked.forEach((s, i) => {
       s.rank = i + 1;
@@ -798,8 +786,7 @@
       segments: segments,
       selected: picked,
       selectedIdx: picked.map((s) => s.index),
-      index: index,
-      segmentWeight: pAvg,
+      documentScore: documentScore,
       zDoc: zDoc,
       greenRate: totalTokens ? totalGreen / totalTokens : 0,
       totalTokens: totalTokens,
@@ -873,7 +860,7 @@
       if (shown >= value) { clearInterval(gaugeTimer); gaugeTimer = null; }
     }, 26);
 
-    el.verdictChip.textContent = value >= 75 ? 'High pressure' : value >= 50 ? 'Moderate' : 'Low';
+    el.verdictChip.textContent = value >= 75 ? 'Above chance' : value >= 50 ? 'At chance' : 'Below chance';
     el.verdictChip.className = 'chip ' + (value >= 75 ? 'high' : value >= 50 ? 'mid' : 'low');
   }
 
@@ -951,7 +938,7 @@
     el.outputPanel.hidden = true;
     if (el.runPanel) el.runPanel.hidden = true;
     el.removeBtn.disabled = false;
-    renderGauge(result.index);
+    renderGauge(Math.round(result.documentScore * 100));
     renderStats(result);
     renderSegments(result);
     renderPreview(result);
